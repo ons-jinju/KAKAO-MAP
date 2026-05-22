@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>무선국 위치 지도</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+
+    #header {
+      background: linear-gradient(135deg, #1a237e, #3949ab);
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      position: relative;
+      z-index: 10;
+    }
+    #header h1 { font-size: 17px; font-weight: bold; }
+    #count-badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 3px 10px;
+      font-size: 12px;
+    }
+
+    #toolbar {
+      background: white;
+      padding: 10px 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      border-bottom: 1px solid #e0e0e0;
+      z-index: 10;
+    }
+    #search-input {
+      flex: 1;
+      padding: 8px 14px;
+      border: 1.5px solid #c5cae9;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
+    }
+    #search-input:focus { border-color: #3949ab; }
+    #btn-fit {
+      background: #3949ab;
+      color: white;
+      border: none;
+      border-radius: 16px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #status-bar {
+      background: #fff8e1;
+      border-bottom: 1px solid #ffe082;
+      padding: 5px 14px;
+      font-size: 12px;
+      color: #795548;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #progress-bar-wrap {
+      flex: 1;
+      background: #ffe082;
+      border-radius: 4px;
+      height: 5px;
+      overflow: hidden;
+    }
+    #progress-bar { height: 100%; background: #f9a825; width: 0%; transition: width 0.2s; }
+
+    #app-container { display: flex; height: calc(100vh - 120px); }
+    #map { flex: 1; height: 100%; }
+
+    #side-panel {
+      width: 300px;
+      background: white;
+      border-left: 1px solid #e0e0e0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .side-header {
+      padding: 10px 14px;
+      background: #e8eaf6;
+      font-size: 12px;
+      font-weight: bold;
+      color: #3949ab;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .side-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .side-item:hover { background: #e8eaf6; }
+    .side-item .si-name { font-size: 13px; font-weight: bold; color: #1a237e; }
+    .side-item .si-addr { font-size: 11px; color: #888; margin-top: 2px; }
+
+    @media (max-width: 767px) {
+      #side-panel { display: none; }
+      #app-container { display: block; }
+      #map { height: calc(100vh - 120px); width: 100%; }
+    }
+
+    /* 인포윈도우 */
+    .iw-wrap { padding: 12px 14px; min-width: 220px; max-width: 270px; font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+    .iw-name { font-size: 13px; font-weight: bold; color: #1a237e; margin-bottom: 5px; line-height: 1.4; word-break: break-all; }
+    .iw-addr { font-size: 12px; color: #555; margin-bottom: 10px; line-height: 1.4; }
+    .iw-btns { display: flex; gap: 6px; }
+    .iw-btn { flex: 1; padding: 7px 4px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; text-align: center; display: block; }
+    .iw-btn-nav { background: #FFCD00; color: #333; }
+    .iw-btn-view { background: #1a237e; color: white; }
+
+    /* 에러 메시지 */
+    #error-msg {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border: 2px solid #ef5350;
+      border-radius: 12px;
+      padding: 24px 28px;
+      text-align: center;
+      z-index: 100;
+      max-width: 320px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    #error-msg h3 { color: #ef5350; margin-bottom: 10px; }
+    #error-msg p { font-size: 13px; color: #555; line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <span style="font-size:20px">📡</span>
+  <h1>무선국 위치 지도</h1>
+  <div id="count-badge">로딩 중...</div>
+</div>
+
+<div id="toolbar">
+  <input id="search-input" type="search" placeholder="호출명칭 또는 주소 검색..." oninput="filterMarkers(this.value)">
+  <button id="btn-fit" onclick="fitAll()">전체보기</button>
+</div>
+
+<div id="status-bar">
+  <span id="status-text">📂 엑셀 파일 읽는 중...</span>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+</div>
+
+<div style="position:relative; flex:1;">
+  <div id="app-container">
+    <div id="map"></div>
+    <div id="side-panel">
+      <div class="side-header" id="side-header">목록 (0)</div>
+      <div id="side-list"></div>
+    </div>
+  </div>
+  <div id="error-msg">
+    <h3>⚠️ 지도를 불러올 수 없어요</h3>
+    <p>카카오 개발자 콘솔에서<br><b>JavaScript SDK 도메인</b>이<br>올바르게 저장되었는지 확인해 주세요.<br><br>
+    <code style="font-size:12px; color:#1a237e;">https://ons-jinju.github.io</code></p>
+  </div>
+</div>
+
+<!-- SheetJS: 엑셀 파일 읽기 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+var map, geocoder, activeInfowindow = null;
+var allMarkers = [];
+var geocodeDone = 0, geocodeFailed = 0;
+
+// ── 엑셀 파일 로드 (GitHub에 올린 파일을 자동으로 읽음) ──
+async function loadStations() {
+  // GitHub 저장소에서 엑셀 파일을 직접 읽어옴
+  // 파일명: stations.xlsx (매주 이 파일만 교체하면 자동 반영)
+  var EXCEL_URL = './stations.xlsx';
+
+  try {
+    setStatus('📂 엑셀 파일 불러오는 중...');
+    var resp = await fetch(EXCEL_URL + '?t=' + Date.now()); // 캐시 방지
+    if (!resp.ok) throw new Error('파일 없음: ' + resp.status);
+
+    var buf = await resp.arrayBuffer();
+    var wb = XLSX.read(buf, { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+    var stations = [];
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      var name = row[2]; // 호출명칭 (C열)
+      var addr = row[3]; // 설치장소_수정 (D열)
+      if (name && addr) {
+        // 주소에서 불필요한 설명 제거하고 경상남도 진주시로 정규화
+        var cleanAddr = String(addr)
+          .replace(/\s*(나대지|일반|인근.*|방송.*|환경.*|강관주.*)/g, '')
+          .trim();
+        if (!cleanAddr.startsWith('경상남도')) {
+          cleanAddr = '경상남도 ' + cleanAddr;
+        }
+        stations.push({ name: String(name), address: cleanAddr, origAddr: String(addr) });
+      }
+    }
+    setStatus('✅ ' + stations.length + '개 항목 읽기 완료, 지도에 표시 중...');
+    return stations;
+  } catch (e) {
+    setStatus('❌ 엑셀 파일을 읽지 못했어요: ' + e.message);
+    console.error(e);
+    return [];
+  }
+}
+
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+// ── 카카오맵 초기화 ──
+async function initMap() {
+  try {
+    var container = document.getElementById('map');
+    map = new kakao.maps.Map(container, {
+      center: new kakao.maps.LatLng(35.1796, 128.1076),
+      level: 9
+    });
+    map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    map.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
+    kakao.maps.event.addListener(map, 'click', function() {
+      if (activeInfowindow) { activeInfowindow.close(); activeInfowindow = null; }
+    });
+
+    geocoder = new kakao.maps.services.Geocoder();
+
+    // 엑셀 읽기
+    var stations = await loadStations();
+    if (stations.length === 0) {
+      setStatus('❌ 표시할 데이터가 없어요. stations.xlsx 파일을 확인해 주세요.');
+      return;
+    }
+    geocodeAll(stations);
+  } catch(e) {
+    document.getElementById('error-msg').style.display = 'block';
+    setStatus('❌ 지도 초기화 실패: ' + e.message);
+  }
+}
+
+// ── 주소 → 좌표 변환 + 마커 생성 ──
+function geocodeAll(stations) {
+  var total = stations.length;
+  geocodeDone = 0; geocodeFailed = 0;
+  var iw = new kakao.maps.InfoWindow({ zIndex: 1 });
+
+  function next(i) {
+    if (i >= total) return;
+    var s = stations[i];
+    geocoder.addressSearch(s.address, function(result, status) {
+      if (status === kakao.maps.services.Status.OK) {
+        var pos = new kakao.maps.LatLng(result[0].y, result[0].x);
+        var marker = new kakao.maps.Marker({ position: pos, map: map, title: s.name });
+        var entry = { marker: marker, station: s, lat: result[0].y, lng: result[0].x, visible: true };
+        allMarkers.push(entry);
+        kakao.maps.event.addListener(marker, 'click', (function(e) {
+          return function() { showInfo(e, iw); };
+        })(entry));
+      } else {
+        geocodeFailed++;
+      }
+
+      geocodeDone++;
+      var pct = Math.round(geocodeDone / total * 100);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      setStatus('📍 위치 변환 중... ' + geocodeDone + ' / ' + total);
+
+      if (geocodeDone === total) {
+        var ok = allMarkers.length;
+        document.getElementById('progress-bar').style.background = '#66bb6a';
+        document.getElementById('progress-bar').style.width = '100%';
+        setStatus('✅ ' + ok + '개 위치 표시 완료' + (geocodeFailed > 0 ? ' (변환 실패: ' + geocodeFailed + '개)' : ''));
+        document.getElementById('count-badge').textContent = ok + '개';
+        renderSideList(allMarkers);
+        fitAll();
+      }
+      setTimeout(function() { next(i + 1); }, 80);
+    });
+  }
+  next(0);
+}
+
+// ── 인포윈도우 표시 ──
+function showInfo(entry, iw) {
+  if (activeInfowindow) activeInfowindow.close();
+  var lat = entry.lat, lng = entry.lng;
+  var encName = encodeURIComponent(entry.station.name);
+  var navUrl  = 'https://map.kakao.com/link/to/' + encName + ',' + lat + ',' + lng;
+  var viewUrl = 'https://map.kakao.com/link/map/' + encName + ',' + lat + ',' + lng;
+  iw.setContent(
+    '<div class="iw-wrap">' +
+    '<div class="iw-name">📡 ' + entry.station.name + '</div>' +
+    '<div class="iw-addr">📌 ' + entry.station.origAddr + '</div>' +
+    '<div class="iw-btns">' +
+    '<a class="iw-btn iw-btn-nav" href="' + navUrl + '" target="_blank">🚗 경로안내</a>' +
+    '<a class="iw-btn iw-btn-view" href="' + viewUrl + '" target="_blank">🗺️ 지도보기</a>' +
+    '</div></div>'
+  );
+  iw.open(map, entry.marker);
+  activeInfowindow = iw;
+  map.panTo(entry.marker.getPosition());
+}
+
+// ── 전체보기 ──
+function fitAll() {
+  var visible = allMarkers.filter(function(e) { return e.visible; });
+  if (visible.length === 0) return;
+  var bounds = new kakao.maps.LatLngBounds();
+  visible.forEach(function(e) { bounds.extend(e.marker.getPosition()); });
+  map.setBounds(bounds);
+}
+
+// ── 검색 필터 ──
+function filterMarkers(keyword) {
+  keyword = keyword.trim().toLowerCase();
+  allMarkers.forEach(function(e) {
+    var match = !keyword ||
+      e.station.name.toLowerCase().indexOf(keyword) >= 0 ||
+      e.station.origAddr.toLowerCase().indexOf(keyword) >= 0;
+    e.visible = match;
+    e.marker.setVisible(match);
+  });
+  renderSideList(allMarkers.filter(function(e) { return e.visible; }));
+  if (keyword) fitAll();
+}
+
+// ── 사이드 목록 ──
+function renderSideList(list) {
+  document.getElementById('side-header').textContent = '목록 (' + list.length + ')';
+  var frag = document.createDocumentFragment();
+  list.forEach(function(e) {
+    var div = document.createElement('div');
+    div.className = 'side-item';
+    div.innerHTML = '<div class="si-name">' + e.station.name + '</div>' +
+      '<div class="si-addr">' + e.station.origAddr + '</div>';
+    div.onclick = function() {
+      map.setCenter(e.marker.getPosition());
+      map.setLevel(4);
+      var iw = new kakao.maps.InfoWindow({ zIndex: 1 });
+      showInfo(e, iw);
+    };
+    frag.appendChild(div);
+  });
+  var sl = document.getElementById('side-list');
+  sl.innerHTML = '';
+  sl.appendChild(frag);
+}
+</script>
+
+<!-- 카카오맵 SDK -->
+<script type="text/javascript"
+  src="//dapi.kakao.com/v2/maps/sdk.js?appkey=9e477b69128d827b63adc096ddfa5e59&libraries=services&autoload=false">
+</script>
+<script>
+kakao.maps.load(function() {
+  initMap();
+});
+</script>
+
+</body>
+</html>
