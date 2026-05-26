@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>무선국 위치 지도</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+    #header {
+      background: linear-gradient(135deg,#1a237e,#3949ab);
+      color:white; padding:12px 16px;
+      display:flex; align-items:center; gap:10px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.3);
+    }
+    #header h1 { font-size:17px; font-weight:bold; }
+    #count-badge {
+      margin-left:auto; background:rgba(255,255,255,0.2);
+      border-radius:12px; padding:3px 10px; font-size:12px;
+    }
+    #toolbar {
+      background:white; padding:10px 12px;
+      display:flex; gap:8px; align-items:center;
+      border-bottom:1px solid #e0e0e0;
+    }
+    #search-input {
+      flex:1; padding:8px 14px;
+      border:1.5px solid #c5cae9; border-radius:20px;
+      font-size:14px; outline:none;
+    }
+    #search-input:focus { border-color:#3949ab; }
+    #btn-fit {
+      background:#3949ab; color:white; border:none;
+      border-radius:16px; padding:8px 14px;
+      font-size:13px; cursor:pointer; white-space:nowrap;
+    }
+    #app-container { display:flex; height:calc(100vh - 110px); }
+    #map { flex:1; height:100%; }
+    #side-panel {
+      width:300px; background:white;
+      border-left:1px solid #e0e0e0;
+      overflow-y:auto; display:flex; flex-direction:column;
+    }
+    .side-header {
+      padding:10px 14px; background:#e8eaf6;
+      font-size:12px; font-weight:bold; color:#3949ab;
+      position:sticky; top:0; z-index:1;
+    }
+    .side-item {
+      padding:10px 14px; border-bottom:1px solid #f0f0f0;
+      cursor:pointer; transition:background 0.15s;
+    }
+    .side-item:hover { background:#e8eaf6; }
+    .si-name { font-size:13px; font-weight:bold; color:#1a237e; word-break:break-all; }
+    .si-addr { font-size:11px; color:#888; margin-top:2px; }
+    @media(max-width:767px) {
+      #side-panel { display:none; }
+      #map { height:calc(100vh - 110px); width:100%; }
+    }
+    .popup-name { font-size:13px; font-weight:bold; color:#1a237e; margin-bottom:5px; word-break:break-all; }
+    .popup-addr { font-size:12px; color:#555; margin-bottom:8px; }
+    .popup-btns { display:flex; gap:6px; }
+    .popup-btn {
+      flex:1; padding:7px 4px; border-radius:6px;
+      font-size:12px; font-weight:bold;
+      text-decoration:none; text-align:center; display:block;
+    }
+    .btn-nav { background:#FFCD00; color:#333; }
+    .btn-view { background:#1a237e; color:white; }
+  </style>
+</head>
+<body>
+<div id="header">
+  <span style="font-size:20px">📡</span>
+  <h1>무선국 위치 지도</h1>
+  <div id="count-badge">56개</div>
+</div>
+<div id="toolbar">
+  <input id="search-input" type="search" placeholder="호출명칭 또는 주소 검색..." oninput="filterMarkers(this.value)">
+  <button id="btn-fit" onclick="fitAll()">전체보기</button>
+</div>
+<div id="app-container">
+  <div id="map"></div>
+  <div id="side-panel">
+    <div class="side-header" id="side-header">목록 (56)</div>
+    <div id="side-list"></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var STATIONS = [{"name": "SKL거창석강2LRRU_F4", "lat": 35.6867737807603, "lng": 128.024719968863, "origAddr": "거창군 가조면 석강리 1397"}, {"name": "SKL거창가조LRU0_F4", "lat": 35.7106030252877, "lng": 128.018123442124, "origAddr": "거창군 가조면 수월리 455-1"}, {"name": "공동망_SKG(고)광대_거창가조2AAU_1_3", "lat": 35.701776293631, "lng": 128.019461816541, "origAddr": "거창군 가조면 일부리 1122-1 나대지"}, {"name": "SKL거창일부LRRU_F4(20)", "lat": 35.7012865264089, "lng": 128.031250892709, "origAddr": "거창군 가조면 일부리 770-1"}, {"name": "SKL거창가조3LTRO", "lat": 35.7073169405655, "lng": 128.03926499224, "origAddr": "거창군 가조면 일부리 산31-9"}, {"name": "SKL거창가조3LTROM", "lat": 35.7073169405655, "lng": 128.03926499224, "origAddr": "거창군 가조면 일부리 산31-9"}, {"name": "SK거창가조3WTRO", "lat": 35.7073169405655, "lng": 128.03926499224, "origAddr": "거창군 가조면 일부리 산31-9"}, {"name": "공동망_SKTG(고)광대_거창가조3AAU_1-2", "lat": 35.7073169405655, "lng": 128.03926499224, "origAddr": "거창군 가조면 일부리 산31-9 나대지"}, {"name": "SKL거창장기2LRRU_F4(20)", "lat": 35.7305337711847, "lng": 127.99565404187, "origAddr": "거창군 가조면 장기리 699-7"}, {"name": "SKL거창장기3LRRU_F4(20)", "lat": 35.7130562189124, "lng": 128.002607486352, "origAddr": "거창군 가조면 장기리 91-2"}, {"name": "SKL88고속거창살피터널IB_LTRO", "lat": 35.7104863271307, "lng": 127.975358420999, "origAddr": "거창군 남하면 둔마리 18-1번지"}, {"name": "SKL88고속거창살피터널IB_LTROM", "lat": 35.7104863271307, "lng": 127.975358420999, "origAddr": "거창군 남하면 둔마리 18-1번지"}, {"name": "SK88고속거창살피터널IB_WTRO", "lat": 35.7104863271307, "lng": 127.975358420999, "origAddr": "거창군 남하면 둔마리 18-1번지"}, {"name": "공동망_SKG거창남하AAU_1-2", "lat": 35.7068016303153, "lng": 127.962146186664, "origAddr": "거창군 남하면 둔마리 943-1 나대지"}, {"name": "SKL거창무릉3LRRUM_F4", "lat": 35.66347077408, "lng": 127.944380814404, "origAddr": "거창군 남하면 무릉리 1091-1"}, {"name": "공동망_SKG거창내곡AAU_1-2", "lat": 35.6943790252394, "lng": 127.942937749363, "origAddr": "거창군 남하면 양항리 783 나대지"}, {"name": "공동망_SKG(고)광대_거창IC2AAU_1_3", "lat": 35.6834262621253, "lng": 127.940873173024, "origAddr": "거창군 남하면 양항리 960 나대지"}, {"name": "SKL거창마리LRU0M_F4", "lat": 35.6997104301332, "lng": 127.853925152421, "origAddr": "거창군 마리면 말흘리 206, 오륙도가든  (말흘리)"}, {"name": "SKL거창월계LRRUM_F4", "lat": 35.7136335249532, "lng": 127.853871433847, "origAddr": "거창군 마리면 월계리 213-6"}, {"name": "SKL거창하고LRRU_F4", "lat": 35.6867988354016, "lng": 127.870940229355, "origAddr": "거창군 마리면 하고리 118"}, {"name": "SKL거창고창RU", "lat": 35.6730954489479, "lng": 127.863469619837, "origAddr": "거창군 마리면 하고리 산203"}, {"name": "SKL산청내리수선사MRRU", "lat": 35.3991534796565, "lng": 127.87093647299, "origAddr": "산청군 산청읍 내리 1115-1번지"}, {"name": "공동망_SKTG(고)대통_진주산청내리AAU_1-2", "lat": 35.397979234962, "lng": 127.882256902888, "origAddr": "산청군 산청읍 내리 462-2 나대지"}, {"name": "공동망_SKG(고)대통_산청내리2AAU_1_3", "lat": 35.4045579552042, "lng": 127.873646518559, "origAddr": "산청군 산청읍 내리 산232-17 나대지"}, {"name": "SKL산청장위LRRU_F4", "lat": 35.4667100781146, "lng": 127.919739140933, "origAddr": "산청군 차황면 장위리 1355"}, {"name": "SKL산청장위4LRRU", "lat": 35.4660727939301, "lng": 127.91161247246, "origAddr": "산청군 차황면 장위리 976-6"}, {"name": "SKL합천가회LRRU0_F4", "lat": 35.4339939430088, "lng": 128.025524674697, "origAddr": "합천군 가회면 덕촌리 산44"}, {"name": "SKL합천둔내2LRRU_F4", "lat": 35.4351740211841, "lng": 128.033678542349, "origAddr": "합천군 가회면 둔내리 산219-22"}, {"name": "SKL합천둔내LRRU0_F4", "lat": 35.476858569048, "lng": 128.013076754013, "origAddr": "합천군 가회면 둔내리 산81-1"}, {"name": "SKL합천대병LRRU0_F4", "lat": 35.5202386013494, "lng": 128.009475597024, "origAddr": "합천군 대병면 회양리 1319-2"}, {"name": "SKL합천회양LRRU_F4", "lat": 35.5235060760543, "lng": 128.017278820217, "origAddr": "합천군 대병면 회양리 700-8"}, {"name": "SKL합천묘산2LRU0M_F4", "lat": 35.6550398617852, "lng": 128.109374239464, "origAddr": "합천군 묘산면 산제리 86"}, {"name": "SKL합천금봉LRRU0_F4", "lat": 35.6279605537218, "lng": 128.041180238672, "origAddr": "합천군 봉산면 김봉리 산4"}, {"name": "SKL합천압곡3LRRU_F4", "lat": 35.6693617069142, "lng": 128.053563886117, "origAddr": "합천군 봉산면 압곡리 4"}, {"name": "SK합천압곡7WTRO", "lat": 35.6680482419881, "lng": 128.057235068526, "origAddr": "합천군 봉산면 압곡리 산 150"}, {"name": "SKL합천압곡7LTRO", "lat": 35.6680482419881, "lng": 128.057235068526, "origAddr": "합천군 봉산면 압곡리 산150 오도산자연휴양림"}, {"name": "SKL합천압곡7LTROM", "lat": 35.6680482419881, "lng": 128.057235068526, "origAddr": "합천군 봉산면 압곡리 산150 오도산자연휴양림"}, {"name": "SK합천양지WMC", "lat": 35.5940913655182, "lng": 128.010744796459, "origAddr": "합천군 봉산면 양지리 127"}, {"name": "SKL합천양지2RU", "lat": 35.5940913655182, "lng": 128.010744796459, "origAddr": "합천군 봉산면 양지리 127"}, {"name": "SKL합천삼가2LRRU0_F4", "lat": 35.4134396069031, "lng": 128.122383444715, "origAddr": "합천군 삼가면 금리 59-1"}, {"name": "SKL합천동리LRRU_F4(20)", "lat": 35.4160909058806, "lng": 128.153896853551, "origAddr": "합천군 삼가면 동리 198"}, {"name": "SK합천양전2WMC", "lat": 35.4219987958717, "lng": 128.13796644577, "origAddr": "합천군 삼가면 양전리 768"}, {"name": "SKL삼가2터널IB_LTRO", "lat": 35.416965417342, "lng": 128.134624773117, "origAddr": "합천군 삼가면 양전리 산90-1번지"}, {"name": "SKL삼가2터널IB_LTROM", "lat": 35.416965417342, "lng": 128.134624773117, "origAddr": "합천군 삼가면 양전리 산90-1번지"}, {"name": "SK삼가2터널IB_WTRO", "lat": 35.416965417342, "lng": 128.134624773117, "origAddr": "합천군 삼가면 양전리 산90-1번지"}, {"name": "SKL삼가1터널IB_LTRO", "lat": 35.4089867612851, "lng": 128.129793618797, "origAddr": "합천군 삼가면 일부리 산47-1번지"}, {"name": "SKL삼가1터널IB_LTROM", "lat": 35.4089867612851, "lng": 128.129793618797, "origAddr": "합천군 삼가면 일부리 산47-1번지"}, {"name": "SK삼가1터널IB_WTRO", "lat": 35.4089867612851, "lng": 128.129793618797, "origAddr": "합천군 삼가면 일부리 산47-1번지"}, {"name": "SKL합천가호LRRU_F4", "lat": 35.547008934564, "lng": 128.069472569851, "origAddr": "합천군 용주면 가호리 산49"}, {"name": "SKL합천분재공원LTRO", "lat": 35.5522455584083, "lng": 128.073650382582, "origAddr": "합천군 용주면 가호리 산6-4"}, {"name": "SKL합천분재공원LTROM", "lat": 35.5522455584083, "lng": 128.073650382582, "origAddr": "합천군 용주면 가호리 산6-4"}, {"name": "SK합천분재공원WTRO", "lat": 35.5522455584083, "lng": 128.073650382582, "origAddr": "합천군 용주면 가호리 산6-4"}, {"name": "SKL합천용주LRRU0M_F4", "lat": 35.5447393669714, "lng": 128.107052648514, "origAddr": "합천군 용주면 고품리 135-10"}, {"name": "SKT합천고품WDMC", "lat": 35.5341459308745, "lng": 128.097437690294, "origAddr": "합천군 용주면 고품리 331-2"}, {"name": "SKLT합천고품RU", "lat": 35.5341459308745, "lng": 128.097437690294, "origAddr": "합천군 용주면 고품리 331-2"}, {"name": "SKL합천고품2RU", "lat": 35.5558938836519, "lng": 128.108272162293, "origAddr": "합천군 용주면 고품리 산12-43"}];
+var map = L.map('map').setView([35.58030, 128.02268], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+var icon = L.divIcon({
+  className: '',
+  html: '<div style="background:#1a237e;color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,0.4);border:2px solid white;">📡</div>',
+  iconSize:[26,26], iconAnchor:[13,13], popupAnchor:[0,-14]
+});
+var markers = [];
+STATIONS.forEach(function(s) {
+  var m = L.marker([s.lat, s.lng], {icon: icon}).addTo(map);
+  var enc = encodeURIComponent(s.name);
+  var navUrl = 'https://map.kakao.com/link/to/' + enc + ',' + s.lat + ',' + s.lng;
+  var viewUrl = 'https://map.kakao.com/link/map/' + enc + ',' + s.lat + ',' + s.lng;
+  var popup =
+    '<div class="popup-name">📡 ' + s.name + '</div>' +
+    '<div class="popup-addr">📌 ' + s.origAddr + '</div>' +
+    '<div class="popup-btns">' +
+    '<a class="popup-btn btn-nav" href="' + navUrl + '" target="_blank">🚗 경로안내</a>' +
+    '<a class="popup-btn btn-view" href="' + viewUrl + '" target="_blank">🗺️ 지도보기</a>' +
+    '</div>';
+  m.bindPopup(popup, {maxWidth:270});
+  markers.push({marker:m, station:s, visible:true});
+});
+function fitAll() {
+  var v = markers.filter(function(e){ return e.visible; });
+  if (!v.length) return;
+  map.fitBounds(L.featureGroup(v.map(function(e){ return e.marker; })).getBounds().pad(0.1));
+}
+fitAll();
+function filterMarkers(kw) {
+  kw = kw.trim().toLowerCase();
+  var shown = [];
+  markers.forEach(function(e) {
+    var m = !kw || e.station.name.toLowerCase().indexOf(kw)>=0 || e.station.origAddr.toLowerCase().indexOf(kw)>=0;
+    e.visible = m;
+    if (m) { e.marker.addTo(map); shown.push(e); } else map.removeLayer(e.marker);
+  });
+  renderSideList(shown);
+  if (kw && shown.length) fitAll();
+}
+function renderSideList(list) {
+  document.getElementById('side-header').textContent = '목록 (' + list.length + ')';
+  var sl = document.getElementById('side-list');
+  sl.innerHTML = '';
+  list.forEach(function(e) {
+    var d = document.createElement('div');
+    d.className = 'side-item';
+    d.innerHTML = '<div class="si-name">' + e.station.name + '</div><div class="si-addr">' + e.station.origAddr + '</div>';
+    d.onclick = function() { map.setView([e.station.lat, e.station.lng], 17); e.marker.openPopup(); };
+    sl.appendChild(d);
+  });
+}
+renderSideList(markers);
+</script>
+</body>
+</html>
